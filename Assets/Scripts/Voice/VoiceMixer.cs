@@ -1,6 +1,4 @@
-using System.Linq;
 using UnityEngine;
-using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace Voice
@@ -16,12 +14,17 @@ namespace Voice
         [Header("Canvas")] 
         [SerializeField] private Slider vocalLevelSlider;
         [SerializeField] private Slider musicLevelSlider;
+        [SerializeField] private VoiceVisualizer vocalVisualizer;
+        [SerializeField] private VoiceVisualizer musicVisualizer;
+        [SerializeField] private Slider voiceAdjusterSlider;
         
         private AudioClip _vocalClip;
         private AudioClip _musicClip;
 
+        private bool _isPlaying;
         private void Awake()
         {
+            //StartPlaying();
             _vocalClip = vocalSource.clip;
             _musicClip = musicSource.clip;
             musicLevelSlider.value = musicSource.volume;
@@ -30,9 +33,24 @@ namespace Voice
 
         private void Update()
         {
+            if(!_isPlaying) return;
+            VoiceLevelAdjuster();
+            musicVisualizer.UpdateVisualizer(_musicClip, musicSource.timeSamples);
+            vocalVisualizer.UpdateVisualizer(_vocalClip, vocalSource.timeSamples);
+        }
+
+        private void VoiceLevelAdjuster()
+        {
             var vocalTime = vocalSource.timeSamples;
             var musicTime = musicSource.timeSamples;
 
+            if (vocalTime >= _vocalClip.samples * _vocalClip.channels ||
+                musicTime >= _musicClip.samples * _musicClip.channels)
+            {
+                StopPlaying();
+                return;
+            }
+            
             var vocalClipData = new float[clipSamples];
             _vocalClip.GetData(vocalClipData, vocalTime);
             var vocalVoiceLevel = 0f;
@@ -69,20 +87,48 @@ namespace Voice
             if(ratio < ratioThreshold) return;
             vocalSource.volume = 1f;
             musicSource.volume = 1f;
-            if (musicGreaterVocal)
-            {
-                var musicVolume = musicSource.volume;
-                musicVolume *= ratio;
-                musicSource.volume = musicVolume;
-                musicLevelSlider.value = musicVolume;
-                return;
-            }
-            
+            var musicVolume = musicSource.volume;
             var vocalVolume = vocalSource.volume;
-            vocalVolume *= ratio;
+            
+            if (musicGreaterVocal)
+                musicVolume *= ratio;
+            else
+                vocalVolume *= ratio;
+            
+            musicVolume *= Mathf.Clamp01(1 + voiceAdjusterSlider.value);
+            vocalVolume *= Mathf.Clamp01(1 - voiceAdjusterSlider.value);
+            
+            musicSource.volume = musicVolume;
+            musicLevelSlider.value = musicVolume;
+            
             vocalSource.volume = vocalVolume;
             vocalLevelSlider.value = vocalVolume;
+        }
 
+        public void StartPlaying()
+        {
+            vocalSource.Play();
+            musicSource.Play();
+            _isPlaying = true;
+        }
+        
+        public void PausePlaying()
+        {
+            vocalSource.Pause();
+            musicSource.Pause();
+            _isPlaying = false;
+        }
+        
+        public void StopPlaying()
+        {
+            vocalSource.Stop();
+            musicSource.Stop();
+            _isPlaying = false;
+        }
+
+        public void Exit()
+        {
+            Application.Quit();
         }
     }
 }
